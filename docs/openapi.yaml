@@ -1,0 +1,226 @@
+openapi: 3.1.0
+info:
+  title: "API News"
+  version: "1.0.0"
+  description: "API para gestionar usuarios con autenticación JWT. Toda la API requiere JWT salvo /auth/login y /auth/register."
+  contact:
+    name: "Equipo API News"
+    email: "contacto@apinews.com"
+
+servers:
+  - url: "https://apinews.onrender.com/api"
+    description: "Servidor de Producción"
+  - url: "http://localhost:3000/api"
+    description: "Servidor Local"
+  - url: "https://staging.apinews.com/api"
+    description: "Servidor Staging"
+
+tags:
+  - name: auth
+    description: "Autenticación de usuarios (rutas públicas)"
+  - name: users
+    description: "Gestión de usuarios (rutas protegidas con JWT)"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Id:
+      type: string
+      description: "ID único (UUID o Mongo ObjectId)"
+      example: "66f0c7d1f8a2b4c9d1234567"
+
+    Error:
+      type: object
+      properties:
+        statusCode: { type: integer, example: 401 }
+        error: { type: string, example: "Unauthorized" }
+        message: { type: string, example: "Invalid or expired token" }
+      required: [statusCode, error, message]
+
+    User:
+      type: object
+      properties:
+        id: { $ref: "#/components/schemas/Id" }
+        nombre: { type: string, example: "Jane Doe" }
+        email: { type: string, format: email, example: "jane@example.com" }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, nombre, email]
+
+    UserCreate:
+      type: object
+      properties:
+        nombre: { type: string }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 6 }
+      required: [nombre, email, password]
+
+    UserUpdate:
+      type: object
+      properties:
+        nombre: { type: string }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 6 }
+
+    AuthLogin:
+      type: object
+      properties:
+        email: { type: string, format: email, example: "jane@example.com" }
+        password: { type: string, example: "secret123" }
+      required: [email, password]
+
+    AuthRegister:
+      allOf:
+        - $ref: "#/components/schemas/UserCreate"
+
+    AuthResponse:
+      type: object
+      properties:
+        token: { type: string, example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+      required: [token]
+
+security:
+  - BearerAuth: []  # Requerido globalmente
+
+paths:
+
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Iniciar sesión (público)
+      description: Devuelve únicamente el token JWT.
+      operationId: authLogin
+      security: []  # Override: público
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthLogin" }
+            examples:
+              ok:
+                value: { email: "jane@example.com", password: "secret123" }
+      responses:
+        "200":
+          description: Login correcto
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "400":
+          description: Datos inválidos
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "401":
+          description: Credenciales inválidas
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+        "500":
+          description: Error del servidor
+          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+
+  /auth/register:
+    post:
+      tags: [auth]
+      summary: Registrar nuevo usuario (público)
+      operationId: authRegister
+      security: []  # Override: público
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthRegister" }
+            examples:
+              ok:
+                value:
+                  nombre: "Jane Doe"
+                  email: "jane@example.com"
+                  password: "secret123"
+      responses:
+        "201":
+          description: Usuario creado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { description: Datos inválidos, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "409": { description: Email ya existe, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "500": { description: Error del servidor, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /users:
+    get:
+      tags: [users]
+      summary: Listar usuarios (protegido)
+      operationId: listUsers
+      responses:
+        "200":
+          description: Lista de usuarios
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+        "401": { description: No autorizado, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+    post:
+      tags: [users]
+      summary: Crear usuario (protegido)
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserCreate" }
+      responses:
+        "201": { description: Creado, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+        "400": { description: Datos inválidos, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { description: No autorizado, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+  /users/{id}:
+    get:
+      tags: [users]
+      summary: Obtener usuario por ID (protegido)
+      operationId: getUserById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Id" }
+      responses:
+        "200": { description: Usuario, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+        "401": { description: No autorizado, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { description: No encontrado, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+    put:
+      tags: [users]
+      summary: Actualizar usuario (protegido)
+      operationId: updateUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Id" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UserUpdate" }
+      responses:
+        "200": { description: Actualizado, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+        "400": { description: Datos inválidos, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "401": { description: No autorizado, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { description: No encontrado, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+
+    delete:
+      tags: [users]
+      summary: Eliminar usuario (protegido)
+      operationId: deleteUser
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/Id" }
+      responses:
+        "204": { description: Eliminado sin contenido }
+        "401": { description: No autorizado, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
+        "404": { description: No encontrado, content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } } }
